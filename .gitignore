@@ -1,0 +1,87 @@
+# ========================================
+# Smart Ledger 项目 Git 忽略文件
+# ========================================
+
+# ==================== 通用 ====================
+.DS_Store
+*.log
+*.tmp
+*.temp
+*.swp
+*.swo
+*~
+
+# IDE
+.idea/
+.vscode/
+*.iml
+*.ipr
+*.iws
+.project
+.classpath
+.settings/
+
+# ==================== 前端 ====================
+# 依赖目录
+frontend/node_modules/
+node_modules/
+
+# 构建输出
+frontend/dist/
+frontend/.output/
+frontend/.nuxt/
+
+# 缓存
+frontend/.cache/
+frontend/.parcel-cache/
+frontend/.vite/
+
+# 环境变量
+frontend/.env
+frontend/.env.local
+frontend/.env.*.local
+
+# 日志
+frontend/npm-debug.log*
+frontend/yarn-debug.log*
+frontend/yarn-error.log*
+frontend/pnpm-debug.log*
+
+# TypeScript 缓存
+frontend/*.tsbuildinfo
+
+# ==================== 后端 ====================
+# Maven
+backend/target/
+backend/.mvn/
+!backend/.mvn/wrapper/maven-wrapper.jar
+backend/mvnw
+backend/mvnw.cmd
+
+# Gradle (如果使用)
+backend/.gradle/
+backend/build/
+
+# 日志
+backend/logs/
+backend/*.log
+
+# 环境变量
+backend/.env
+
+# ==================== 数据库 ====================
+*.sql.bak
+*.dump
+
+# ==================== 其他 ====================
+# 测试覆盖率
+coverage/
+*.lcov
+
+# 本地配置
+local.properties
+*.local
+
+# 临时文件
+tmp/
+temp/
