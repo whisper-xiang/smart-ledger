@@ -16,6 +16,12 @@ export interface UpdatePasswordParams {
   newPassword: string;
 }
 
+export interface UserStatistics {
+  billCount: number;
+  diaryCount: number;
+  savingPlanCount: number;
+}
+
 export const userApi = {
   getUserInfo(): Promise<UserInfo> {
     return request.get("/user/info");
@@ -27,5 +33,9 @@ export const userApi = {
 
   updatePassword(data: UpdatePasswordParams): Promise<void> {
     return request.put("/user/password", data);
+  },
+
+  getUserStatistics(): Promise<UserStatistics> {
+    return request.get("/user/statistics");
   },
 };

@@ -35,4 +35,10 @@ public class UserController {
         userService.updatePassword(userId, oldPassword, newPassword);
         return Result.success("密码修改成功", null);
     }
+
+    @GetMapping("/statistics")
+    public Result<Map<String, Object>> getUserStatistics(@RequestAttribute("userId") Long userId) {
+        Map<String, Object> statistics = userService.getUserStatistics(userId);
+        return Result.success(statistics);
+    }
 }

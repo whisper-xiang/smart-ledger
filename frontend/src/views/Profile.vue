@@ -1,5 +1,5 @@
 <template>
-  <div class="profile">
+  <div class="profile" v-loading="loading">
     <el-row :gutter="20">
       <!-- 用户信息卡片 -->
       <el-col :span="8">
@@ -38,13 +38,8 @@
           <el-tabs v-model="activeTab">
             <!-- 基本信息 -->
             <el-tab-pane label="基本信息" name="basic">
-              <el-form
-                ref="basicFormRef"
-                :model="basicForm"
-                :rules="basicRules"
-                label-width="100px"
-                style="max-width: 500px"
-              >
+              <el-form ref="basicFormRef" :model="basicForm" :rules="basicRules" label-width="100px"
+                style="max-width: 500px">
                 <el-form-item label="用户名" prop="username">
                   <el-input v-model="basicForm.username" />
                 </el-form-item>
@@ -62,13 +57,8 @@
 
             <!-- 修改密码 -->
             <el-tab-pane label="修改密码" name="password">
-              <el-form
-                ref="passwordFormRef"
-                :model="passwordForm"
-                :rules="passwordRules"
-                label-width="100px"
-                style="max-width: 500px"
-              >
+              <el-form ref="passwordFormRef" :model="passwordForm" :rules="passwordRules" label-width="100px"
+                style="max-width: 500px">
                 <el-form-item label="当前密码" prop="oldPassword">
                   <el-input v-model="passwordForm.oldPassword" type="password" show-password />
                 </el-form-item>
@@ -133,28 +123,31 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive } from 'vue'
+import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import type { FormInstance, FormRules } from 'element-plus'
 import { UserFilled } from '@element-plus/icons-vue'
+import { userApi } from '@/api/user'
 
+const loading = ref(false)
 const activeTab = ref('basic')
 const basicFormRef = ref<FormInstance>()
 const passwordFormRef = ref<FormInstance>()
 
 const userInfo = reactive({
-  username: '张三',
-  email: 'zhangsan@example.com',
-  joinDate: '2024-01-15',
-  billCount: 156,
-  diaryCount: 23,
-  savingPlans: 3
+  username: '',
+  email: '',
+  phone: '',
+  joinDate: '',
+  billCount: 0,
+  diaryCount: 0,
+  savingPlans: 0
 })
 
 const basicForm = reactive({
-  username: userInfo.username,
-  email: userInfo.email,
-  phone: '138****8888'
+  username: '',
+  email: '',
+  phone: ''
 })
 
 const passwordForm = reactive({
@@ -168,6 +161,56 @@ const preferences = reactive({
   monthlyBudget: 5000,
   notifications: true,
   darkMode: false
+})
+
+// 加载用户信息
+const loadUserInfo = async () => {
+  try {
+    const info = await userApi.getUserInfo()
+    userInfo.username = info.username || ''
+    userInfo.email = info.email || ''
+    userInfo.phone = info.phone || ''
+    userInfo.joinDate = info.createTime ? info.createTime.split('T')[0] : ''
+
+    // 同步到表单
+    basicForm.username = info.username || ''
+    basicForm.email = info.email || ''
+    basicForm.phone = info.phone || ''
+
+    // 同步偏好设置
+    preferences.currency = info.currency || 'CNY'
+    preferences.monthlyBudget = info.monthlyBudget || 5000
+  } catch (error) {
+    console.error('加载用户信息失败:', error)
+  }
+}
+
+// 加载用户统计
+const loadUserStatistics = async () => {
+  try {
+    const stats = await userApi.getUserStatistics()
+    userInfo.billCount = stats.billCount || 0
+    userInfo.diaryCount = stats.diaryCount || 0
+    userInfo.savingPlans = stats.savingPlanCount || 0
+  } catch (error) {
+    console.error('加载用户统计失败:', error)
+  }
+}
+
+// 加载所有数据
+const loadAllData = async () => {
+  loading.value = true
+  try {
+    await Promise.all([loadUserInfo(), loadUserStatistics()])
+  } catch (error) {
+    ElMessage.error('加载数据失败')
+  } finally {
+    loading.value = false
+  }
+}
+
+onMounted(() => {
+  loadAllData()
 })
 
 const basicRules: FormRules = {
@@ -203,27 +246,55 @@ const passwordRules: FormRules = {
 
 const handleSaveBasic = async () => {
   if (!basicFormRef.value) return
-  await basicFormRef.value.validate((valid) => {
+  await basicFormRef.value.validate(async (valid) => {
     if (valid) {
-      ElMessage.success('保存成功')
+      try {
+        await userApi.updateUserInfo({
+          username: basicForm.username,
+          email: basicForm.email,
+          phone: basicForm.phone
+        })
+        userInfo.username = basicForm.username
+        userInfo.email = basicForm.email
+        userInfo.phone = basicForm.phone
+        ElMessage.success('保存成功')
+      } catch (error: any) {
+        ElMessage.error(error.message || '保存失败')
+      }
     }
   })
 }
 
 const handleChangePassword = async () => {
   if (!passwordFormRef.value) return
-  await passwordFormRef.value.validate((valid) => {
+  await passwordFormRef.value.validate(async (valid) => {
     if (valid) {
-      ElMessage.success('密码修改成功')
-      passwordForm.oldPassword = ''
-      passwordForm.newPassword = ''
-      passwordForm.confirmPassword = ''
+      try {
+        await userApi.updatePassword({
+          oldPassword: passwordForm.oldPassword,
+          newPassword: passwordForm.newPassword
+        })
+        ElMessage.success('密码修改成功')
+        passwordForm.oldPassword = ''
+        passwordForm.newPassword = ''
+        passwordForm.confirmPassword = ''
+      } catch (error: any) {
+        ElMessage.error(error.message || '密码修改失败')
+      }
     }
   })
 }
 
-const handleSavePreferences = () => {
-  ElMessage.success('设置已保存')
+const handleSavePreferences = async () => {
+  try {
+    await userApi.updateUserInfo({
+      currency: preferences.currency,
+      monthlyBudget: preferences.monthlyBudget
+    })
+    ElMessage.success('设置已保存')
+  } catch (error: any) {
+    ElMessage.error(error.message || '保存失败')
+  }
 }
 
 const handleExport = (format: string) => {
@@ -237,7 +308,7 @@ const handleClearData = () => {
     type: 'warning'
   }).then(() => {
     ElMessage.success('数据已清空')
-  }).catch(() => {})
+  }).catch(() => { })
 }
 
 const handleDeleteAccount = () => {
@@ -247,7 +318,7 @@ const handleDeleteAccount = () => {
     type: 'warning'
   }).then(() => {
     ElMessage.success('账号已注销')
-  }).catch(() => {})
+  }).catch(() => { })
 }
 </script>
 

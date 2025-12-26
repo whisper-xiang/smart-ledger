@@ -16,4 +16,6 @@ public interface UserService {
     void updateUser(User user);
     
     void updatePassword(Long userId, String oldPassword, String newPassword);
+    
+    Map<String, Object> getUserStatistics(Long userId);
 }

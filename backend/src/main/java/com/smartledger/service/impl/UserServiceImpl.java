@@ -3,7 +3,13 @@ package com.smartledger.service.impl;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.smartledger.dto.LoginDTO;
 import com.smartledger.dto.RegisterDTO;
+import com.smartledger.entity.Bill;
+import com.smartledger.entity.Diary;
+import com.smartledger.entity.SavingPlan;
 import com.smartledger.entity.User;
+import com.smartledger.mapper.BillMapper;
+import com.smartledger.mapper.DiaryMapper;
+import com.smartledger.mapper.SavingPlanMapper;
 import com.smartledger.mapper.UserMapper;
 import com.smartledger.service.UserService;
 import com.smartledger.utils.JwtUtil;
@@ -19,6 +25,9 @@ import java.util.Map;
 public class UserServiceImpl implements UserService {
 
     private final UserMapper userMapper;
+    private final BillMapper billMapper;
+    private final DiaryMapper diaryMapper;
+    private final SavingPlanMapper savingPlanMapper;
     private final PasswordEncoder passwordEncoder;
     private final JwtUtil jwtUtil;
 
@@ -100,5 +109,25 @@ public class UserServiceImpl implements UserService {
         
         user.setPassword(passwordEncoder.encode(newPassword));
         userMapper.updateById(user);
+    }
+
+    @Override
+    public Map<String, Object> getUserStatistics(Long userId) {
+        Long billCount = billMapper.selectCount(
+                new LambdaQueryWrapper<Bill>().eq(Bill::getUserId, userId)
+        );
+        Long diaryCount = diaryMapper.selectCount(
+                new LambdaQueryWrapper<Diary>().eq(Diary::getUserId, userId)
+        );
+        Long savingPlanCount = savingPlanMapper.selectCount(
+                new LambdaQueryWrapper<SavingPlan>().eq(SavingPlan::getUserId, userId)
+        );
+        
+        Map<String, Object> result = new HashMap<>();
+        result.put("billCount", billCount);
+        result.put("diaryCount", diaryCount);
+        result.put("savingPlanCount", savingPlanCount);
+        
+        return result;
     }
 }
