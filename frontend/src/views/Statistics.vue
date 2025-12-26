@@ -1,17 +1,11 @@
 <template>
-  <div class="statistics">
+  <div class="statistics" v-loading="loading">
     <!-- 筛选条件 -->
     <el-card class="filter-card">
       <el-form :inline="true">
         <el-form-item label="时间范围">
-          <el-date-picker
-            v-model="dateRange"
-            type="daterange"
-            range-separator="至"
-            start-placeholder="开始日期"
-            end-placeholder="结束日期"
-            value-format="YYYY-MM-DD"
-          />
+          <el-date-picker v-model="dateRange" type="daterange" range-separator="至" start-placeholder="开始日期"
+            end-placeholder="结束日期" value-format="YYYY-MM-DD" />
         </el-form-item>
         <el-form-item>
           <el-button type="primary" @click="handleQuery">查询</el-button>
@@ -109,10 +103,7 @@
         <el-table-column prop="count" label="笔数" width="100" />
         <el-table-column prop="percentage" label="占比">
           <template #default="{ row }">
-            <el-progress
-              :percentage="row.percentage"
-              :color="detailType === 'income' ? '#67c23a' : '#f56c6c'"
-            />
+            <el-progress :percentage="row.percentage" :color="detailType === 'income' ? '#67c23a' : '#f56c6c'" />
           </template>
         </el-table-column>
       </el-table>
@@ -121,7 +112,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { use } from 'echarts/core'
 import { CanvasRenderer } from 'echarts/renderers'
@@ -133,6 +124,7 @@ import {
   GridComponent
 } from 'echarts/components'
 import VChart from 'vue-echarts'
+import { billApi, type CategoryStatistics, type DailyTrend } from '@/api/bill'
 
 use([
   CanvasRenderer,
@@ -145,175 +137,313 @@ use([
   GridComponent
 ])
 
-const dateRange = ref<string[]>([])
-const detailType = ref('expense')
-
-const totalIncome = ref(15800)
-const totalExpense = ref(9650)
-const netIncome = computed(() => totalIncome.value - totalExpense.value)
-const savingsRate = computed(() => (netIncome.value / totalIncome.value) * 100)
-
-const handleQuery = () => {
-  ElMessage.success('查询成功')
+// 格式化日期为 yyyy-MM-dd
+const formatDate = (date: Date): string => {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
 }
 
+// 获取默认日期范围（本月）
+const getDefaultDateRange = () => {
+  const now = new Date()
+  const startDate = formatDate(new Date(now.getFullYear(), now.getMonth(), 1))
+  const endDate = formatDate(now)
+  return [startDate, endDate]
+}
+
+const loading = ref(false)
+const dateRange = ref<string[]>(getDefaultDateRange())
+const detailType = ref('expense')
+
+const totalIncome = ref(0)
+const totalExpense = ref(0)
+const netIncome = computed(() => totalIncome.value - totalExpense.value)
+const savingsRate = computed(() => totalIncome.value > 0 ? (netIncome.value / totalIncome.value) * 100 : 0)
+
+// 分类统计数据
+const expenseCategoryData = ref<CategoryStatistics[]>([])
+const incomeCategoryData = ref<CategoryStatistics[]>([])
+// 趋势数据
+const trendData = ref<DailyTrend[]>([])
+
+// 加载统计数据
+const loadStatistics = async () => {
+  if (!dateRange.value || dateRange.value.length !== 2) return
+
+  const startDate = dateRange.value[0]
+  const endDate = dateRange.value[1]
+  if (!startDate || !endDate) return
+
+  loading.value = true
+
+  try {
+    // 并行加载所有数据
+    const [expenseStats, incomeStats, trend] = await Promise.all([
+      billApi.getCategoryStatistics('expense', startDate, endDate),
+      billApi.getCategoryStatistics('income', startDate, endDate),
+      billApi.getDailyTrend(startDate, endDate)
+    ])
+
+    expenseCategoryData.value = expenseStats || []
+    incomeCategoryData.value = incomeStats || []
+    trendData.value = trend || []
+
+    // 计算总收入和总支出
+    totalExpense.value = expenseCategoryData.value.reduce((sum, item) => sum + Number(item.amount), 0)
+    totalIncome.value = incomeCategoryData.value.reduce((sum, item) => sum + Number(item.amount), 0)
+
+  } catch (error) {
+    console.error('加载统计数据失败:', error)
+    ElMessage.error('加载统计数据失败')
+  } finally {
+    loading.value = false
+  }
+}
+
+const handleQuery = () => {
+  loadStatistics()
+}
+
+// 分类明细计算
 const categoryDetails = computed(() => {
-  if (detailType.value === 'expense') {
-    return [
-      { category: '餐饮', amount: 2800, count: 45, percentage: 29 },
-      { category: '购物', amount: 2200, count: 12, percentage: 23 },
-      { category: '交通', amount: 1500, count: 30, percentage: 16 },
-      { category: '居住', amount: 1800, count: 3, percentage: 19 },
-      { category: '娱乐', amount: 850, count: 8, percentage: 9 },
-      { category: '其他', amount: 500, count: 5, percentage: 5 }
-    ]
-  } else {
-    return [
-      { category: '工资', amount: 12000, count: 1, percentage: 76 },
-      { category: '兼职', amount: 2500, count: 4, percentage: 16 },
-      { category: '投资收益', amount: 800, count: 2, percentage: 5 },
-      { category: '其他', amount: 500, count: 3, percentage: 3 }
+  const data = detailType.value === 'expense' ? expenseCategoryData.value : incomeCategoryData.value
+  const total = data.reduce((sum, item) => sum + Number(item.amount), 0)
+
+  return data.map(item => ({
+    category: item.category,
+    amount: Number(item.amount),
+    count: 0, // API暂时没有返回笔数
+    percentage: total > 0 ? Math.round((Number(item.amount) / total) * 100) : 0
+  }))
+})
+
+onMounted(() => {
+  loadStatistics()
+})
+
+const trendOption = computed(() => {
+  if (!dateRange.value || dateRange.value.length !== 2) {
+    return { xAxis: { data: [] }, series: [] }
+  }
+
+  const startDateStr = dateRange.value[0]
+  const endDateStr = dateRange.value[1]
+  if (!startDateStr || !endDateStr) {
+    return { xAxis: { data: [] }, series: [] }
+  }
+  const start = new Date(startDateStr)
+  const end = new Date(endDateStr)
+  const dates: string[] = []
+  const incomeMap = new Map<string, number>()
+  const expenseMap = new Map<string, number>()
+
+  // 生成日期列表
+  for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+    const dateStr = formatDate(d)
+    dates.push(dateStr)
+    incomeMap.set(dateStr, 0)
+    expenseMap.set(dateStr, 0)
+  }
+
+  // 填充数据
+  trendData.value.forEach(item => {
+    const rawDate = item.date || ''
+    const dateStr = rawDate.includes('T') ? rawDate.split('T')[0] : rawDate
+    if (item.type === 'income') {
+      incomeMap.set(dateStr, (incomeMap.get(dateStr) || 0) + Number(item.amount))
+    } else {
+      expenseMap.set(dateStr, (expenseMap.get(dateStr) || 0) + Number(item.amount))
+    }
+  })
+
+  // 格式化X轴标签
+  const xLabels = dates.map(d => {
+    const date = new Date(d)
+    return `${date.getMonth() + 1}/${date.getDate()}`
+  })
+
+  return {
+    tooltip: {
+      trigger: 'axis'
+    },
+    legend: {
+      data: ['收入', '支出']
+    },
+    grid: {
+      left: '3%',
+      right: '4%',
+      bottom: '3%',
+      containLabel: true
+    },
+    xAxis: {
+      type: 'category',
+      data: xLabels
+    },
+    yAxis: {
+      type: 'value'
+    },
+    series: [
+      {
+        name: '收入',
+        type: 'line',
+        smooth: true,
+        itemStyle: { color: '#67c23a' },
+        areaStyle: { color: 'rgba(103, 194, 58, 0.1)' },
+        data: dates.map(d => incomeMap.get(d) || 0)
+      },
+      {
+        name: '支出',
+        type: 'line',
+        smooth: true,
+        itemStyle: { color: '#f56c6c' },
+        areaStyle: { color: 'rgba(245, 108, 108, 0.1)' },
+        data: dates.map(d => expenseMap.get(d) || 0)
+      }
     ]
   }
 })
 
-const trendOption = computed(() => ({
-  tooltip: {
-    trigger: 'axis'
-  },
-  legend: {
-    data: ['收入', '支出']
-  },
-  grid: {
-    left: '3%',
-    right: '4%',
-    bottom: '3%',
-    containLabel: true
-  },
-  xAxis: {
-    type: 'category',
-    data: ['1月', '2月', '3月', '4月', '5月', '6月', '7月', '8月', '9月', '10月', '11月', '12月']
-  },
-  yAxis: {
-    type: 'value'
-  },
-  series: [
-    {
-      name: '收入',
-      type: 'line',
-      smooth: true,
-      itemStyle: { color: '#67c23a' },
-      areaStyle: { color: 'rgba(103, 194, 58, 0.1)' },
-      data: [12000, 13500, 12800, 14200, 13000, 15800, 14500, 16000, 15200, 14800, 15500, 15800]
+const categoryColors = ['#f56c6c', '#e6a23c', '#409eff', '#67c23a', '#909399', '#b37feb', '#36cfc9', '#ff85c0']
+
+const expensePieOption = computed(() => {
+  const data = expenseCategoryData.value.map((item, index) => ({
+    value: Number(item.amount),
+    name: item.category,
+    itemStyle: { color: categoryColors[index % categoryColors.length] }
+  }))
+
+  return {
+    tooltip: {
+      trigger: 'item',
+      formatter: '{b}: ¥{c} ({d}%)'
     },
-    {
-      name: '支出',
-      type: 'line',
-      smooth: true,
-      itemStyle: { color: '#f56c6c' },
-      areaStyle: { color: 'rgba(245, 108, 108, 0.1)' },
-      data: [8500, 9200, 8800, 10500, 9800, 9650, 10200, 11000, 9500, 10800, 9200, 9650]
-    }
-  ]
-}))
+    legend: {
+      orient: 'vertical',
+      left: 'left'
+    },
+    series: [
+      {
+        type: 'pie',
+        radius: ['40%', '70%'],
+        avoidLabelOverlap: false,
+        itemStyle: {
+          borderRadius: 10,
+          borderColor: '#fff',
+          borderWidth: 2
+        },
+        label: { show: false },
+        emphasis: {
+          label: { show: true, fontSize: 14, fontWeight: 'bold' }
+        },
+        data: data.length > 0 ? data : [{ value: 0, name: '暂无数据', itemStyle: { color: '#e0e0e0' } }]
+      }
+    ]
+  }
+})
 
-const expensePieOption = computed(() => ({
-  tooltip: {
-    trigger: 'item',
-    formatter: '{b}: ¥{c} ({d}%)'
-  },
-  legend: {
-    orient: 'vertical',
-    left: 'left'
-  },
-  series: [
-    {
-      type: 'pie',
-      radius: ['40%', '70%'],
-      avoidLabelOverlap: false,
-      itemStyle: {
-        borderRadius: 10,
-        borderColor: '#fff',
-        borderWidth: 2
-      },
-      label: { show: false },
-      emphasis: {
-        label: { show: true, fontSize: 14, fontWeight: 'bold' }
-      },
-      data: [
-        { value: 2800, name: '餐饮', itemStyle: { color: '#f56c6c' } },
-        { value: 2200, name: '购物', itemStyle: { color: '#e6a23c' } },
-        { value: 1800, name: '居住', itemStyle: { color: '#409eff' } },
-        { value: 1500, name: '交通', itemStyle: { color: '#67c23a' } },
-        { value: 850, name: '娱乐', itemStyle: { color: '#909399' } },
-        { value: 500, name: '其他', itemStyle: { color: '#b88230' } }
-      ]
-    }
-  ]
-}))
+const incomeColors = ['#67c23a', '#409eff', '#e6a23c', '#909399', '#b37feb', '#36cfc9', '#ff85c0', '#f56c6c']
 
-const incomePieOption = computed(() => ({
-  tooltip: {
-    trigger: 'item',
-    formatter: '{b}: ¥{c} ({d}%)'
-  },
-  legend: {
-    orient: 'vertical',
-    left: 'left'
-  },
-  series: [
-    {
-      type: 'pie',
-      radius: ['40%', '70%'],
-      avoidLabelOverlap: false,
-      itemStyle: {
-        borderRadius: 10,
-        borderColor: '#fff',
-        borderWidth: 2
-      },
-      label: { show: false },
-      emphasis: {
-        label: { show: true, fontSize: 14, fontWeight: 'bold' }
-      },
-      data: [
-        { value: 12000, name: '工资', itemStyle: { color: '#67c23a' } },
-        { value: 2500, name: '兼职', itemStyle: { color: '#409eff' } },
-        { value: 800, name: '投资收益', itemStyle: { color: '#e6a23c' } },
-        { value: 500, name: '其他', itemStyle: { color: '#909399' } }
-      ]
-    }
-  ]
-}))
+const incomePieOption = computed(() => {
+  const data = incomeCategoryData.value.map((item, index) => ({
+    value: Number(item.amount),
+    name: item.category,
+    itemStyle: { color: incomeColors[index % incomeColors.length] }
+  }))
 
-const dailyBarOption = computed(() => ({
-  tooltip: {
-    trigger: 'axis'
-  },
-  grid: {
-    left: '3%',
-    right: '4%',
-    bottom: '3%',
-    containLabel: true
-  },
-  xAxis: {
-    type: 'category',
-    data: Array.from({ length: 31 }, (_, i) => `${i + 1}日`)
-  },
-  yAxis: {
-    type: 'value'
-  },
-  series: [
-    {
-      type: 'bar',
-      itemStyle: { color: '#f56c6c' },
-      data: [
-        120, 85, 150, 200, 0, 350, 95, 180, 220, 0,
-        150, 280, 90, 175, 0, 420, 85, 130, 0, 250,
-        180, 95, 310, 0, 150, 200, 85, 175, 0, 220, 150
-      ]
+  return {
+    tooltip: {
+      trigger: 'item',
+      formatter: '{b}: ¥{c} ({d}%)'
+    },
+    legend: {
+      orient: 'vertical',
+      left: 'left'
+    },
+    series: [
+      {
+        type: 'pie',
+        radius: ['40%', '70%'],
+        avoidLabelOverlap: false,
+        itemStyle: {
+          borderRadius: 10,
+          borderColor: '#fff',
+          borderWidth: 2
+        },
+        label: { show: false },
+        emphasis: {
+          label: { show: true, fontSize: 14, fontWeight: 'bold' }
+        },
+        data: data.length > 0 ? data : [{ value: 0, name: '暂无数据', itemStyle: { color: '#e0e0e0' } }]
+      }
+    ]
+  }
+})
+
+const dailyBarOption = computed(() => {
+  if (!dateRange.value || dateRange.value.length !== 2) {
+    return { xAxis: { data: [] }, series: [] }
+  }
+
+  const startDateStr = dateRange.value[0]
+  const endDateStr = dateRange.value[1]
+  if (!startDateStr || !endDateStr) {
+    return { xAxis: { data: [] }, series: [] }
+  }
+  const start = new Date(startDateStr)
+  const end = new Date(endDateStr)
+  const dates: string[] = []
+  const expenseMap = new Map<string, number>()
+
+  // 生成日期列表
+  for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+    const dateStr = formatDate(d)
+    dates.push(dateStr)
+    expenseMap.set(dateStr, 0)
+  }
+
+  // 填充支出数据
+  trendData.value.forEach(item => {
+    if (item.type === 'expense') {
+      const rawDate = item.date || ''
+      const dateStr = rawDate.includes('T') ? rawDate.split('T')[0] : rawDate
+      expenseMap.set(dateStr, (expenseMap.get(dateStr) || 0) + Number(item.amount))
     }
-  ]
-}))
+  })
+
+  // 格式化X轴标签
+  const xLabels = dates.map(d => {
+    const date = new Date(d)
+    return `${date.getDate()}日`
+  })
+
+  return {
+    tooltip: {
+      trigger: 'axis'
+    },
+    grid: {
+      left: '3%',
+      right: '4%',
+      bottom: '3%',
+      containLabel: true
+    },
+    xAxis: {
+      type: 'category',
+      data: xLabels
+    },
+    yAxis: {
+      type: 'value'
+    },
+    series: [
+      {
+        type: 'bar',
+        itemStyle: { color: '#f56c6c' },
+        data: dates.map(d => expenseMap.get(d) || 0)
+      }
+    ]
+  }
+})
 </script>
 
 <style scoped>

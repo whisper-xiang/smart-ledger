@@ -18,4 +18,7 @@ public interface BillMapper extends BaseMapper<Bill> {
     
     @Select("SELECT category, SUM(amount) as amount FROM bill WHERE user_id = #{userId} AND type = #{type} AND bill_date BETWEEN #{startDate} AND #{endDate} AND deleted = 0 GROUP BY category")
     List<Map<String, Object>> getCategoryStatistics(@Param("userId") Long userId, @Param("type") String type, @Param("startDate") LocalDate startDate, @Param("endDate") LocalDate endDate);
+    
+    @Select("SELECT bill_date as date, type, SUM(amount) as amount FROM bill WHERE user_id = #{userId} AND bill_date BETWEEN #{startDate} AND #{endDate} AND deleted = 0 GROUP BY bill_date, type ORDER BY bill_date")
+    List<Map<String, Object>> getDailyTrend(@Param("userId") Long userId, @Param("startDate") LocalDate startDate, @Param("endDate") LocalDate endDate);
 }

@@ -122,4 +122,9 @@ public class BillServiceImpl implements BillService {
     public List<Map<String, Object>> getCategoryStatistics(Long userId, String type, LocalDate startDate, LocalDate endDate) {
         return billMapper.getCategoryStatistics(userId, type, startDate, endDate);
     }
+
+    @Override
+    public List<Map<String, Object>> getDailyTrend(Long userId, LocalDate startDate, LocalDate endDate) {
+        return billMapper.getDailyTrend(userId, startDate, endDate);
+    }
 }

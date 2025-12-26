@@ -83,4 +83,13 @@ public class BillController {
         List<Map<String, Object>> statistics = billService.getCategoryStatistics(userId, type, startDate, endDate);
         return Result.success(statistics);
     }
+
+    @GetMapping("/statistics/trend")
+    public Result<List<Map<String, Object>>> getDailyTrend(
+            @RequestAttribute("userId") Long userId,
+            @RequestParam @DateTimeFormat(pattern = "yyyy-MM-dd") LocalDate startDate,
+            @RequestParam @DateTimeFormat(pattern = "yyyy-MM-dd") LocalDate endDate) {
+        List<Map<String, Object>> trend = billService.getDailyTrend(userId, startDate, endDate);
+        return Result.success(trend);
+    }
 }

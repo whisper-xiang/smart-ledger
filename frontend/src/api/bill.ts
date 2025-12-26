@@ -45,6 +45,12 @@ export interface CategoryStatistics {
   amount: number;
 }
 
+export interface DailyTrend {
+  date: string;
+  type: string;
+  amount: number;
+}
+
 export const billApi = {
   getBillList(params: BillQueryParams): Promise<PageResult<Bill>> {
     return request.get("/bills", { params });
@@ -81,6 +87,12 @@ export const billApi = {
   ): Promise<CategoryStatistics[]> {
     return request.get("/bills/statistics/category", {
       params: { type, startDate, endDate },
+    });
+  },
+
+  getDailyTrend(startDate: string, endDate: string): Promise<DailyTrend[]> {
+    return request.get("/bills/statistics/trend", {
+      params: { startDate, endDate },
     });
   },
 };
